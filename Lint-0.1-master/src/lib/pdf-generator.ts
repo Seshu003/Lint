@@ -1,0 +1,167 @@
+import jsPDF from 'jspdf';
+import { AnalysisResult } from './gemini';
+
+export function generateAnalysisReport(
+  projectName: string,
+  analysis: AnalysisResult,
+  userEmail: string
+): jsPDF {
+  const doc = new jsPDF();
+  let yPosition = 20;
+  const pageHeight = doc.internal.pageSize.height;
+  const margin = 20;
+
+  // Helper function to add new page if needed
+  const checkPageBreak = (height: number) => {
+    if (yPosition + height > pageHeight - margin) {
+      doc.addPage();
+      yPosition = 20;
+    }
+  };
+
+  // Title
+  doc.setFontSize(24);
+  doc.setTextColor(30, 64, 175); // Blue
+  doc.text('Tech Debt Analysis Report', margin, yPosition);
+  yPosition += 15;
+
+  // Project info
+  doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Project: ${projectName}`, margin, yPosition);
+  yPosition += 7;
+  doc.text(`Generated: ${new Date().toLocaleDateString()}`, margin, yPosition);
+  yPosition += 7;
+  doc.text(`For: ${userEmail}`, margin, yPosition);
+  yPosition += 20;
+
+  // Overall Score
+  checkPageBreak(30);
+  doc.setFontSize(18);
+  doc.setTextColor(124, 58, 237); // Purple
+  doc.text('Overall Tech Debt Score', margin, yPosition);
+  yPosition += 10;
+
+  doc.setFontSize(36);
+  const scoreColor = analysis.overall_debt_score > 70 ? [239, 68, 68] : // Red
+                     analysis.overall_debt_score > 40 ? [245, 158, 11] : // Orange
+                     [34, 197, 94]; // Green
+  doc.setTextColor(...scoreColor);
+  doc.text(`${analysis.overall_debt_score}/100`, margin, yPosition);
+  yPosition += 20;
+
+  // Summary
+  checkPageBreak(40);
+  doc.setFontSize(16);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Executive Summary', margin, yPosition);
+  yPosition += 10;
+
+  doc.setFontSize(11);
+  const summaryLines = doc.splitTextToSize(analysis.summary, 170);
+  summaryLines.forEach((line: string) => {
+    checkPageBreak(7);
+    doc.text(line, margin, yPosition);
+    yPosition += 7;
+  });
+  yPosition += 10;
+
+  // File Analysis
+  if (analysis.file_analyses.length > 0) {
+    checkPageBreak(20);
+    doc.setFontSize(16);
+    doc.text('File Analysis', margin, yPosition);
+    yPosition += 15;
+
+    analysis.file_analyses.forEach((fileAnalysis, index) => {
+      checkPageBreak(25);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${index + 1}. ${fileAnalysis.file_path}`, margin, yPosition);
+      yPosition += 7;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Debt Score: ${fileAnalysis.debt_score}/100`, margin + 10, yPosition);
+      yPosition += 10;
+
+      if (fileAnalysis.issues.length > 0) {
+        fileAnalysis.issues.slice(0, 3).forEach((issue) => {
+          checkPageBreak(15);
+          
+          const severityColor = issue.severity === 'high' ? [239, 68, 68] :
+                               issue.severity === 'medium' ? [245, 158, 11] :
+                               [156, 163, 175];
+          doc.setTextColor(...severityColor);
+          doc.text(`• ${issue.type} (${issue.severity})`, margin + 15, yPosition);
+          yPosition += 5;
+          
+          doc.setTextColor(0, 0, 0);
+          const descLines = doc.splitTextToSize(issue.description, 150);
+          descLines.forEach((line: string) => {
+            checkPageBreak(5);
+            doc.text(line, margin + 20, yPosition);
+            yPosition += 5;
+          });
+          yPosition += 3;
+        });
+      }
+      yPosition += 5;
+    });
+  }
+
+  // Recommendations
+  if (analysis.recommendations.length > 0) {
+    checkPageBreak(20);
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Recommendations', margin, yPosition);
+    yPosition += 15;
+
+    analysis.recommendations.forEach((rec, index) => {
+      checkPageBreak(20);
+      
+      doc.setFontSize(12);
+      const priorityColor = rec.priority === 'high' ? [239, 68, 68] :
+                           rec.priority === 'medium' ? [245, 158, 11] :
+                           [34, 197, 94];
+      doc.setTextColor(...priorityColor);
+      doc.text(`${index + 1}. ${rec.category} (${rec.priority} priority)`, margin, yPosition);
+      yPosition += 8;
+      
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      const descLines = doc.splitTextToSize(rec.description, 160);
+      descLines.forEach((line: string) => {
+        checkPageBreak(5);
+        doc.text(line, margin + 5, yPosition);
+        yPosition += 5;
+      });
+      
+      if (rec.impact) {
+        yPosition += 2;
+        doc.setTextColor(100, 100, 100);
+        const impactLines = doc.splitTextToSize(`Impact: ${rec.impact}`, 160);
+        impactLines.forEach((line: string) => {
+          checkPageBreak(5);
+          doc.text(line, margin + 5, yPosition);
+          yPosition += 5;
+        });
+      }
+      yPosition += 8;
+    });
+  }
+
+  // Footer
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Generated by Tech Debt Analyzer | Page ${i} of ${pageCount}`, 
+             margin, pageHeight - 10);
+  }
+
+  return doc;
+}
